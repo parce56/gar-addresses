@@ -1,0 +1,99 @@
+version: '3.8'
+
+services:
+  gardb:
+    image: paradedb/paradedb:latest
+    container_name: gardb
+    environment:
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_ADMIN_NAME}
+    volumes:
+      - ${DB_PATH}:/var/lib/postgresql/data
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    networks:
+      - garnetwork
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  garservice:
+    build:
+      context: ./garservice
+      dockerfile: Dockerfile
+    container_name: garservice
+    depends_on:
+      gardb:
+        condition: service_healthy
+    environment:
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_ADMIN_NAME=${DB_ADMIN_NAME}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DATA_SOURCE_PATH=/garservice/data
+      - DATA_LOAD_MODE=${DATA_LOAD_MODE}
+      - DATA_HANDLE_MODE=${DATA_HANDLE_MODE}
+      - RUN_INTERVAL_DAYS=${RUN_INTERVAL_DAYS}
+      - REGIONS=${REGIONS}
+      - BATCH_SIZE=${BATCH_SIZE}
+      - MAX_CONCURRENT_BATCHES=${MAX_CONCURRENT_BATCHES}
+      - MVR_WORK_MEM=${MVR_WORK_MEM}
+      - MVR_MAINTENANCE_WORK_MEM=${MVR_MAINTENANCE_WORK_MEM}
+      - LOG_TO_FILE=${LOG_TO_FILE}
+      - MAX_SIZE_LOG_FILE=${MAX_SIZE_LOG_FILE}
+      - LOGS_PATH=/garservice/logs
+    volumes:
+      - ${DATA_SOURCE_PATH}:/garservice/data
+      - ${LOGS_PATH}:/garservice/logs
+    networks:
+      - garnetwork
+    restart: unless-stopped
+  
+  garapi:
+    build:
+      context: ./garapi
+      dockerfile: Dockerfile
+    container_name: garapi
+    depends_on:
+      - garservice
+    environment:
+      - PORT=${PORT}
+      - AUTH_BASIC=${AUTH_BASIC}
+      - BASIC_LOGIN=${BASIC_LOGIN}
+      - BASIC_PASSWORD=${BASIC_PASSWORD}
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_SCHEMA=${DB_SCHEMA}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    ports:
+      - "${PORT}:${PORT}"
+    networks:
+      - garnetwork
+    restart: unless-stopped
+
+  garapp:
+    build:
+      context: ./garapp
+      dockerfile: Dockerfile
+    container_name: garapp
+    depends_on:
+      - garapi
+    ports:
+      - "3001:3001"
+    networks:
+      - garnetwork
+    restart: unless-stopped
+
+networks:
+  garnetwork:
+    driver: bridge
